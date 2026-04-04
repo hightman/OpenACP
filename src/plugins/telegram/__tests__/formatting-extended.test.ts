@@ -23,6 +23,7 @@ function makeSpec(
     title: "Read src/main.ts",
     description: null,
     command: null,
+    inputContent: null,
     outputSummary: null,
     outputContent: null,
     diffStats: null,
@@ -622,6 +623,19 @@ describe("renderToolCard", () => {
     ]);
     const result = renderToolCard(snap);
     expect(result).toContain('<a href="http://diff.url">');
+  });
+
+  it("keeps relative path in title but viewer link shows filename", () => {
+    const snap = makeSnapshot([
+      makeSpec("t1", {
+        kind: "read",
+        title: "packages/app/src/index.ts",
+        viewerLinks: { file: "http://file.url" },
+      }),
+    ]);
+    const result = renderToolCard(snap);
+    expect(result).toContain("packages/app/src/index.ts");
+    expect(result).toContain("View index.ts");
   });
 
   it("renders plan section with HTML escaping", () => {

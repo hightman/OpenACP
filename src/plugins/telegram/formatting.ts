@@ -224,17 +224,14 @@ export function renderToolCard(snap: ToolCardSnapshot): string {
   return sections.join("\n\n");
 }
 
-const FILE_KINDS = new Set(["read", "edit", "write", "delete"]);
+/** Keep work titles as-is (can be relative paths). */
+function shortenTitle(title: string, _kind: string): string {
+  return title;
+}
 
-/** Shorten absolute file paths to just filename (+ line range if present) */
-function shortenTitle(title: string, kind: string): string {
-  if (!FILE_KINDS.has(kind) || !title.includes("/")) return title;
-  // Separate optional parenthesized suffix (e.g. " (lines 10–50)" or " (from line 10)")
-  const parenIdx = title.indexOf(" (");
-  const pathPart = parenIdx > 0 ? title.slice(0, parenIdx) : title;
-  const rangePart = parenIdx > 0 ? title.slice(parenIdx) : "";
-  const fileName = pathPart.split("/").pop() || pathPart;
-  return fileName + rangePart;
+function basename(pathLike: string): string {
+  const normalized = pathLike.replace(/\\/g, "/");
+  return normalized.split("/").pop() || pathLike;
 }
 
 function renderSpecSection(spec: ToolDisplaySpec): string {
@@ -289,7 +286,7 @@ function renderSpecSection(spec: ToolDisplaySpec): string {
 
   if (spec.viewerLinks?.file || spec.viewerLinks?.diff || spec.outputViewerLink) {
     const linkParts: string[] = [];
-    const shortName = displayTitle || kindLabel || spec.kind;
+    const shortName = basename(displayTitle || kindLabel || spec.kind);
     if (spec.viewerLinks?.file)
       linkParts.push(`<a href="${escapeHtml(spec.viewerLinks.file)}">View ${escapeHtml(shortName)}</a>`);
     if (spec.viewerLinks?.diff)

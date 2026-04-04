@@ -52,39 +52,84 @@ function capitalize(s: string): string {
   return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
 }
 
-function buildTitle(entry: ToolEntry, kind: string): string {
+function getStringField(input: Record<string, unknown>, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = input[key];
+    if (typeof value === "string" && value.trim().length > 0) return value;
+  }
+  return null;
+}
+
+function parseApplyPatchTargets(patchText: string): string[] {
+  const lines = patchText.split("\n");
+  const targets: string[] = [];
+  const seen = new Set<string>();
+  for (const line of lines) {
+    const match = line.match(/^\*\*\*\s+(?:Update|Add|Delete)\s+File:\s+(.+)$/);
+    if (!match) continue;
+    const path = match[1].trim();
+    if (!path || seen.has(path)) continue;
+    seen.add(path);
+    targets.push(path);
+  }
+  return targets;
+}
+
+function normalizePathLike(pathLike: string): string {
+  return pathLike.replace(/\\/g, "/");
+}
+
+function isAbsolutePath(pathLike: string): boolean {
+  return pathLike.startsWith("/") || /^[A-Za-z]:\//.test(pathLike);
+}
+
+function relativizePath(pathLike: string, workingDirectory?: string): string {
+  if (!workingDirectory) return pathLike;
+  const normalizedPath = normalizePathLike(pathLike);
+  if (!isAbsolutePath(normalizedPath)) return normalizedPath;
+
+  const normalizedCwd = normalizePathLike(workingDirectory).replace(/\/+$/, "");
+  if (!normalizedCwd) return normalizedPath;
+  if (normalizedPath === normalizedCwd) return ".";
+  const prefix = `${normalizedCwd}/`;
+  if (normalizedPath.startsWith(prefix)) return normalizedPath.slice(prefix.length);
+  return normalizedPath;
+}
+
+function buildTitle(
+  entry: ToolEntry,
+  kind: string,
+  sessionContext?: { id: string; workingDirectory: string },
+): string {
   // Explicit overrides take highest priority
   if (entry.displayTitle) return entry.displayTitle;
   if (entry.displaySummary) return entry.displaySummary;
 
   const input = asRecord(entry.rawInput);
+  const nameLower = entry.name.toLowerCase();
 
   if (kind === "read") {
-    const filePath = typeof input.file_path === "string" ? input.file_path : null;
+    const filePath = getStringField(input, ["file_path", "filePath", "path"]);
     if (filePath) {
+      const displayPath = relativizePath(filePath, sessionContext?.workingDirectory);
       // start_line/end_line style
       const startLine = typeof input.start_line === "number" ? input.start_line : null;
       const endLine = typeof input.end_line === "number" ? input.end_line : null;
-      if (startLine !== null && endLine !== null) return `${filePath} (lines ${startLine}–${endLine})`;
-      if (startLine !== null) return `${filePath} (from line ${startLine})`;
+      if (startLine !== null && endLine !== null) return `${displayPath} (lines ${startLine}–${endLine})`;
+      if (startLine !== null) return `${displayPath} (from line ${startLine})`;
       // offset/limit style (Claude Code Read tool)
       const offset = typeof input.offset === "number" ? input.offset : null;
       const limit = typeof input.limit === "number" ? input.limit : null;
-      if (offset !== null && limit !== null) return `${filePath} (lines ${offset}–${offset + limit - 1})`;
-      if (offset !== null) return `${filePath} (from line ${offset})`;
-      return filePath;
+      if (offset !== null && limit !== null) return `${displayPath} (lines ${offset}–${offset + limit - 1})`;
+      if (offset !== null) return `${displayPath} (from line ${offset})`;
+      return displayPath;
     }
     return capitalize(entry.name);
   }
 
   if (kind === "edit" || kind === "write" || kind === "delete") {
-    const filePath =
-      typeof input.file_path === "string"
-        ? input.file_path
-        : typeof input.path === "string"
-          ? input.path
-          : null;
-    if (filePath) return filePath;
+    const filePath = getStringField(input, ["file_path", "filePath", "path"]);
+    if (filePath) return relativizePath(filePath, sessionContext?.workingDirectory);
     return capitalize(entry.name);
   }
 
@@ -122,6 +167,48 @@ function buildTitle(entry: ToolEntry, kind: string): string {
       return title;
     }
     return capitalize(entry.name);
+  }
+
+  // Fallbacks for tools that often come through with kind="other"
+  if (nameLower === "apply_patch") {
+    const patchText = getStringField(input, ["patchText"]);
+    if (patchText) {
+      const targets = parseApplyPatchTargets(patchText)
+        .map((target) => relativizePath(target, sessionContext?.workingDirectory));
+      if (targets.length === 1) return targets[0];
+      if (targets.length > 1) {
+        const shown = targets.slice(0, 2).join(", ");
+        const remaining = targets.length - 2;
+        return remaining > 0 ? `${shown} (+${remaining} files)` : shown;
+      }
+    }
+    return "apply_patch";
+  }
+
+  if (nameLower === "codesearch") {
+    const query = getStringField(input, ["query", "pattern", "q"]);
+    const path = getStringField(input, ["path", "root", "directory"]);
+    if (query && path) return `Code search \"${query}\" in ${relativizePath(path, sessionContext?.workingDirectory)}`;
+    if (query) return `Code search \"${query}\"`;
+    return "Code search";
+  }
+
+  if (nameLower === "todowrite") {
+    const todos = Array.isArray(input.todos) ? input.todos : [];
+    if (todos.length > 0) {
+      const inProgress = todos.filter((t) => {
+        if (!t || typeof t !== "object") return false;
+        const status = (t as Record<string, unknown>).status;
+        return status === "in_progress";
+      }).length;
+      const completed = todos.filter((t) => {
+        if (!t || typeof t !== "object") return false;
+        const status = (t as Record<string, unknown>).status;
+        return status === "completed";
+      }).length;
+      return `Todo list (${completed}/${todos.length} done${inProgress > 0 ? `, ${inProgress} active` : ""})`;
+    }
+    return "Todo list";
   }
 
   if (kind === "fetch" || kind === "web") {
@@ -166,7 +253,7 @@ export class DisplaySpecBuilder {
   ): ToolDisplaySpec {
     const effectiveKind = entry.displayKind ?? entry.kind;
     const icon = KIND_ICONS[effectiveKind] ?? KIND_ICONS["other"] ?? "🛠️";
-    const title = buildTitle(entry, effectiveKind);
+    const title = buildTitle(entry, effectiveKind, sessionContext);
     const isHidden = entry.isNoise && mode !== "high";
 
     // Fields that are always null on low
