@@ -48,6 +48,13 @@ describe("integrate opencode plugin strategy", () => {
     expect(commandContent).toContain("name: openacp:handoff");
     const pluginContent = fs.readFileSync(pluginPath, "utf-8");
     expect(pluginContent).toContain("OPENCODE_SESSION_ID");
+    expect(pluginContent).toContain("id: \"openacp-session-inject\"");
+    expect(pluginContent).toContain("sessionID: input.sessionID");
+    expect(pluginContent).toContain("messageID: \"openacp-inject\"");
+
+    const reinstallResult = await installIntegration("opencode", caps.integration);
+    expect(reinstallResult.success).toBe(true);
+    expect(reinstallResult.logs).toContain("Already installed, skipping.");
 
     const integration = getIntegration("opencode");
     expect(integration).toBeDefined();
@@ -59,5 +66,20 @@ describe("integrate opencode plugin strategy", () => {
     expect(fs.existsSync(commandPath)).toBe(false);
     expect(fs.existsSync(pluginPath)).toBe(false);
     expect(integration!.items[0]!.isInstalled()).toBe(false);
+  });
+
+  it("returns success with a message when uninstalling missing files", async () => {
+    const { getAgentCapabilities } = await import("../../core/agents/agent-dependencies.js");
+    const { uninstallIntegration } = await import("../integrate.js");
+
+    const caps = getAgentCapabilities("opencode");
+    expect(caps.integration?.strategy).toBe("plugin");
+    if (!caps.integration || caps.integration.strategy !== "plugin") {
+      throw new Error("Expected opencode plugin integration spec");
+    }
+
+    const uninstallResult = await uninstallIntegration("opencode", caps.integration);
+    expect(uninstallResult.success).toBe(true);
+    expect(uninstallResult.logs).toContain("Nothing to remove.");
   });
 });

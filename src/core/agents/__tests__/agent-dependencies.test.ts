@@ -45,9 +45,7 @@ describe("agent-dependencies", () => {
       expect(caps.supportsResume).toBe(true);
       expect(caps.resumeCommand?.("sess-123")).toBe("opencode --session sess-123");
       expect(caps.integration?.strategy).toBe("plugin");
-      if (caps.integration?.strategy === "plugin") {
-        expect(caps.integration.handoffCommandName).toBe("openacp:handoff");
-      }
+      expect(caps.integration?.handoffCommandName).toBe("openacp:handoff");
     });
   });
 

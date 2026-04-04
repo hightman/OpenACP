@@ -15,7 +15,7 @@ export interface AgentSetupInfo {
 }
 
 export interface AgentHooksIntegrationSpec {
-  strategy?: "hooks";
+  strategy: "hooks";
   hookEvent: string;
   settingsPath: string;
   settingsFormat: "settings_json" | "hooks_json";
@@ -201,6 +201,7 @@ const AGENT_CAPABILITIES: Record<string, AgentCapability> = {
     supportsResume: true,
     resumeCommand: (sid) => `claude --resume ${sid}`,
     integration: {
+      strategy: "hooks",
       hookEvent: "UserPromptSubmit",
       settingsPath: "~/.claude/settings.json",
       settingsFormat: "settings_json",
@@ -218,6 +219,7 @@ const AGENT_CAPABILITIES: Record<string, AgentCapability> = {
     supportsResume: true,
     resumeCommand: (sid) => `cursor --resume ${sid}`,
     integration: {
+      strategy: "hooks",
       hookEvent: "beforeSubmitPrompt",
       settingsPath: "~/.cursor/hooks.json",
       settingsFormat: "hooks_json",
@@ -233,6 +235,7 @@ const AGENT_CAPABILITIES: Record<string, AgentCapability> = {
     supportsResume: true,
     resumeCommand: (sid) => `gemini --resume ${sid}`,
     integration: {
+      strategy: "hooks",
       hookEvent: "BeforeAgent",
       settingsPath: "~/.gemini/settings.json",
       settingsFormat: "settings_json",
@@ -245,6 +248,7 @@ const AGENT_CAPABILITIES: Record<string, AgentCapability> = {
     supportsResume: true,
     resumeCommand: () => `cline --continue`,
     integration: {
+      strategy: "hooks",
       hookEvent: "TaskStart",
       settingsPath: "~/.cline/settings.json",
       settingsFormat: "settings_json",

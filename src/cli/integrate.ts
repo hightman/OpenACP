@@ -33,7 +33,7 @@ function isPluginIntegrationSpec(spec: AgentIntegrationSpec): spec is AgentPlugi
 }
 
 function isHooksIntegrationSpec(spec: AgentIntegrationSpec): spec is AgentHooksIntegrationSpec {
-  return !isPluginIntegrationSpec(spec);
+  return spec.strategy === "hooks";
 }
 
 function expandPath(p: string): string {
@@ -176,9 +176,9 @@ Use OPENCODE_SESSION_ID from injected context, then run:
 
 openacp adopt opencode <OPENCODE_SESSION_ID>
 
-If a channel is provided in $ARGUMENTS, pass it as --channel:
+If a channel argument is provided, append:
 
-openacp adopt opencode <OPENCODE_SESSION_ID> --channel "$ARGUMENTS"
+--channel <channel_name>
 
 Usage:
   /${spec.handoffCommandName}
@@ -192,6 +192,9 @@ function generateOpencodePlugin(spec: AgentPluginIntegrationSpec): string {
     "command.execute.before": async (input, output) => {
       if (input.command !== ${JSON.stringify(spec.handoffCommandName)}) return
       output.parts.unshift({
+        id: "openacp-session-inject",
+        sessionID: input.sessionID,
+        messageID: "openacp-inject",
         type: "text",
         text: \`OPENCODE_SESSION_ID: \${input.sessionID}\\n\`,
       })
@@ -411,22 +414,26 @@ async function uninstallHooksIntegration(agentKey: string, spec: AgentHooksInteg
 async function installPluginIntegration(_agentKey: string, spec: AgentPluginIntegrationSpec): Promise<IntegrationResult> {
   const logs: string[] = [];
   try {
-    if (spec.pluginProvider !== "opencode") {
-      return {
-        success: false,
-        logs: [`Unsupported plugin integration provider: ${spec.pluginProvider}`],
-      };
-    }
-
     const commandsDir = expandPath(spec.commandsPath);
     mkdirSync(commandsDir, { recursive: true });
     const commandPath = join(commandsDir, spec.handoffCommandFile);
-    writeFileSync(commandPath, generateOpencodeHandoffCommand(spec));
-    logs.push(`Created ${commandPath}`);
 
     const pluginsDir = expandPath(spec.pluginsPath);
     mkdirSync(pluginsDir, { recursive: true });
     const pluginPath = join(pluginsDir, spec.pluginFileName);
+
+    if (existsSync(commandPath) && existsSync(pluginPath)) {
+      logs.push("Already installed, skipping.");
+      return { success: true, logs };
+    }
+
+    if (existsSync(commandPath) || existsSync(pluginPath)) {
+      logs.push("Overwriting existing files.");
+    }
+
+    writeFileSync(commandPath, generateOpencodeHandoffCommand(spec));
+    logs.push(`Created ${commandPath}`);
+
     writeFileSync(pluginPath, generateOpencodePlugin(spec));
     logs.push(`Created ${pluginPath}`);
 
@@ -440,16 +447,23 @@ async function installPluginIntegration(_agentKey: string, spec: AgentPluginInte
 async function uninstallPluginIntegration(_agentKey: string, spec: AgentPluginIntegrationSpec): Promise<IntegrationResult> {
   const logs: string[] = [];
   try {
-    const commandPath = expandPath(join(spec.commandsPath, spec.handoffCommandFile));
+    const commandPath = join(expandPath(spec.commandsPath), spec.handoffCommandFile);
+    let removedCount = 0;
     if (existsSync(commandPath)) {
       unlinkSync(commandPath);
       logs.push(`Removed ${commandPath}`);
+      removedCount += 1;
     }
 
-    const pluginPath = expandPath(join(spec.pluginsPath, spec.pluginFileName));
+    const pluginPath = join(expandPath(spec.pluginsPath), spec.pluginFileName);
     if (existsSync(pluginPath)) {
       unlinkSync(pluginPath);
       logs.push(`Removed ${pluginPath}`);
+      removedCount += 1;
+    }
+
+    if (removedCount === 0) {
+      logs.push("Nothing to remove.");
     }
 
     return { success: true, logs };
