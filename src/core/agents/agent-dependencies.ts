@@ -14,7 +14,8 @@ export interface AgentSetupInfo {
   loginCommand?: string;
 }
 
-export interface AgentIntegrationSpec {
+export interface AgentHooksIntegrationSpec {
+  strategy?: "hooks";
   hookEvent: string;
   settingsPath: string;
   settingsFormat: "settings_json" | "hooks_json";
@@ -27,6 +28,18 @@ export interface AgentIntegrationSpec {
   sessionIdVar?: string;
   workingDirVar?: string;
 }
+
+export interface AgentPluginIntegrationSpec {
+  strategy: "plugin";
+  pluginProvider: "opencode";
+  commandsPath: string;
+  pluginsPath: string;
+  handoffCommandName: string;
+  handoffCommandFile: string;
+  pluginFileName: string;
+}
+
+export type AgentIntegrationSpec = AgentHooksIntegrationSpec | AgentPluginIntegrationSpec;
 
 export interface AgentCapability {
   supportsResume: boolean;
@@ -251,6 +264,19 @@ const AGENT_CAPABILITIES: Record<string, AgentCapability> = {
   amp: {
     supportsResume: true,
     resumeCommand: (sid) => `amp threads continue ${sid}`,
+  },
+  opencode: {
+    supportsResume: true,
+    resumeCommand: (sid) => `opencode --session ${sid}`,
+    integration: {
+      strategy: "plugin",
+      pluginProvider: "opencode",
+      commandsPath: "~/.config/opencode/commands/",
+      pluginsPath: "~/.config/opencode/plugins/",
+      handoffCommandName: "openacp:handoff",
+      handoffCommandFile: "openacp-handoff.md",
+      pluginFileName: "openacp-handoff.js",
+    },
   },
 };
 
