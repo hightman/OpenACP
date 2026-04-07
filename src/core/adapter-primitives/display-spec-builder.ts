@@ -172,24 +172,6 @@ function buildTitle(entry: ToolEntry, kind: string): string {
     return capitalize(entry.name);
   }
 
-  if (nameLower === "todowrite") {
-    const todos = Array.isArray(input.todos) ? input.todos : [];
-    if (todos.length > 0) {
-      const inProgress = todos.filter((t) => {
-        if (!t || typeof t !== "object") return false;
-        const status = (t as Record<string, unknown>).status;
-        return status === "in_progress";
-      }).length;
-      const completed = todos.filter((t) => {
-        if (!t || typeof t !== "object") return false;
-        const status = (t as Record<string, unknown>).status;
-        return status === "completed";
-      }).length;
-      return `Todo list (${completed}/${todos.length} done${inProgress > 0 ? `, ${inProgress} active` : ""})`;
-    }
-    return "Todo list";
-  }
-
   if (kind === "fetch" || kind === "web") {
     const url = typeof input.url === "string" ? input.url : null;
     if (url && url !== "undefined") return url.length > 60 ? url.slice(0, 57) + "..." : url;
